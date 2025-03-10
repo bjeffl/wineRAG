@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Recommendations</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">Product Recommendations</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container mt-5">
+        <div class="row mb-4">
+            <div class="col-12 text-center">
+                <h1>Product Recommendations</h1>
+                <p class="lead">Give thumbs up or down to help us recommend products you'll love</p>
+                <a href="/reset" class="btn btn-outline-secondary">Start Fresh Recommendations</a>
+            </div>
+        </div>
+        
+        <div class="row" id="products-container">
+            {% for product in products %}
+                <div class="col-md-4 mb-4 product-card" data-product-id="{{ product.id }}">
+                    <div class="card h-100">
+                        {% if product.image %}
+                            <img src="{{ product.image }}" class="card-img-top" alt="{{ product.name }}" style="height: 200px; object-fit: contain; padding: 20px;">
+                        {% else %}
+                            <div class="card-img-top bg-light d-flex align-items-center justify-content-center" style="height: 200px;">
+                                <span class="text-muted">No Image</span>
+                            </div>
+                        {% endif %}
+                        
+                        <div class="card-body">
+                            <h5 class="card-title">{{ product.name }}</h5>
+                            <p class="card-text text-primary">${{ product.price }}</p>
+                            <p class="card-text"><small class="text-muted">Category: {{ product.category }}</small></p>
+                            <p class="card-text">{{ product.description }}</p>
+                        </div>
+                        
+                        <div class="card-footer bg-white border-top-0">
+                            <div class="d-flex justify-content-between">
+                                <button class="btn btn-success feedback-btn" data-product-id="{{ product.id }}" data-feedback="up">
+                                    <i class="fas fa-thumbs-up"></i> Like
+                                </button>
+                                <button class="btn btn-danger feedback-btn" data-product-id="{{ product.id }}" data-feedback="down">
+                                    <i class="fas fa-thumbs-down"></i> Dislike
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+        
+        <!-- Loading indicator -->
+        <div id="loading-indicator" class="text-center my-4" style="display: none;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Finding new products for you...</p>
+        </div>
+    </div>
+
+    <!-- Template for new product cards -->
+    <template id="product-card-template">
+        <div class="col-md-4 mb-4 product-card">
+            <div class="card h-100">
+                <div class="product-image">
+                    <!-- Image will be set via JavaScript -->
+                </div>
+                
+                <div class="card-body">
+                    <h5 class="card-title product-name"></h5>
+                    <p class="card-text text-primary product-price"></p>
+                    <p class="card-text"><small class="text-muted product-category"></small></p>
+                    <p class="card-text product-description"></p>
+                </div>
+                
+                <div class="card-footer bg-white border-top-0">
+                    <div class="d-flex justify-content-between">
+                        <button class="btn btn-success feedback-btn" data-feedback="up">
+                            <i class="fas fa-thumbs-up"></i> Like
+                        </button>
+                        <button class="btn btn-danger feedback-btn" data-feedback="down">
+                            <i class="fas fa-thumbs-down"></i> Dislike
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Handle feedback buttons
+            const productsContainer = document.getElementById('products-container');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            
+            productsContainer.addEventListener('click', async function(e) {
+                const target = e.target.closest('.feedback-btn');
+                if (!target) return;
+                
+                const productCard = target.closest('.product-card');
+                const productId = productCard.dataset.productId || target.dataset.productId;
+                const feedbackType = target.dataset.feedback;
+                
+                // Show loading indicator
+                productCard.style.opacity = '0.5';
+                loadingIndicator.style.display = 'block';
+                
+                try {
+                    const response = await fetch('/feedback', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            product_id: productId,
+                            feedback: feedbackType
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        // Replace the current cards with new recommendations
+                        replaceWithNewProducts(data.new_products);
+                    } else {
+                        alert('Error: ' + (data.error || 'An unknown error occurred'));
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('An error occurred while processing your feedback. Please try again.');
+                } finally {
+                    // Hide loading indicator
+                    loadingIndicator.style.display = 'none';
+                    productCard.style.opacity = '1';
+                }
+            });
+            
+            function replaceWithNewProducts(products) {
+                // Clear current products
+                productsContainer.innerHTML = '';
+                
+                // Template for creating new product cards
+                const template = document.getElementById('product-card-template');
+                
+                // Add new products
+                products.forEach(product => {
+                    // Clone the template
+                    const productCard = document.importNode(template.content, true).firstElementChild;
+                    
+                    // Set product ID for feedback
+                    productCard.dataset.productId = product.id;
+                    
+                    // Set buttons' product ID
+                    const buttons = productCard.querySelectorAll('.feedback-btn');
+                    buttons.forEach(button => button.dataset.productId = product.id);
+                    
+                    // Set product details
+                    productCard.querySelector('.product-name').textContent = product.name;
+                    productCard.querySelector('.product-price').textContent = '$' + product.price;
+                    productCard.querySelector('.product-category').textContent = 'Category: ' + product.category;
+                    productCard.querySelector('.product-description').textContent = product.description;
+                    
+                    // Set product image
+                    const imageContainer = productCard.querySelector('.product-image');
+                    if (product.image) {
+                        imageContainer.innerHTML = `<img src="${product.image}" class="card-img-top" alt="${product.name}" style="height: 200px; object-fit: contain; padding: 20px;">`;
+                    } else {
+                        imageContainer.innerHTML = `<div class="card-img-top bg-light d-flex align-items-center justify-content-center" style="height: 200px;"><span class="text-muted">No Image</span></div>`;
+                    }
+                    
+                    // Add to container
+                    productsContainer.appendChild(productCard);
+                });
+                
+                // If no products, show message
+                if (products.length === 0) {
+                    productsContainer.innerHTML = `
+                        <div class="col-12 text-center">
+                            <div class="alert alert-info">
+                                No more products to recommend at this time. Please check back later.
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        });
+    </script>
+</body>
+</html>
